@@ -1156,8 +1156,8 @@ body {
             // Показываем дополнительные строки только если статус ACTIVE
             if (isActive) {
                 userInfoRows += `
-                    <div class="info-row"><span class="info-label">${t('expires_at')}</span><span class="info-value">${isNeverExpires ? t('never_expires') : formatDate(expiresDate)}</span></div>
-                    ${!isNeverExpires ? `<div class="info-row"><span class="info-label">${t('days_left')}</span><span class="info-value">${user.daysLeft}</span></div>` : ''}
+                    <div class="info-row"><span class="info-label">${t('expires_at')}</span><span class="info-value">${isNeverExpires ? t('never_expires') : formatDate(expiresDate)}</span> | 
+                    ${!isNeverExpires ? `<span class="info-label">${t('days_left')}</span><span class="info-value">${user.daysLeft}</span></div>` : ''}
                     <div class="info-row"><span class="info-label">${t('traffic_used')}</span><span class="info-value">${user.trafficUsed} / ${trafficLimitText}</span></div>
                 `;
             }
