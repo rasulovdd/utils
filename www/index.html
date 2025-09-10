@@ -1159,7 +1159,6 @@ body {
                     <div class="info-row"><span class="info-label">${t('expires_at')}</span><span class="info-value">${isNeverExpires ? t('never_expires') : formatDate(expiresDate)}</span></div>
                     ${!isNeverExpires ? `<div class="info-row"><span class="info-label">${t('days_left')}</span><span class="info-value">${user.daysLeft}</span></div>` : ''}
                     <div class="info-row"><span class="info-label">${t('traffic_used')}</span><span class="info-value">${user.trafficUsed} / ${trafficLimitText}</span></div>
-                    <div class="info-row"><span class="info-label">${t('traffic_reset')}</span><span class="info-value">${t(user.trafficLimitStrategy)}</span></div>
                 `;
             }
             
