@@ -1,0 +1,39 @@
+---
+- name: Удаление пользователя из системы Ubuntu
+  hosts: ubuntu
+  become: yes
+  vars_prompt:
+    - name: username
+      prompt: "Введите имя пользователя для удаления:"
+      private: no
+    - name: remove_home
+      prompt: "Удалить домашнюю директорию? (true/false):"
+      default: "false"
+      private: no
+
+  tasks:
+    - name: Проверка существования пользователя
+      ansible.builtin.user:
+        name: "{{ username }}"
+        state: absent
+        remove: "{{ remove_home }}"
+      register: user_check
+
+    - name: Вывод результата операции
+      ansible.builtin.debug:
+        msg: "Пользователь {{ username }} успешно удалён"
+      when: user_check.changed
+
+    - name: Удаление пользователя из группы sudo (если был)
+      ansible.builtin.group:
+        name: sudo
+        state: absent
+        users: "{{ username }}"
+      when: user_check.changed
+
+    - name: Очистка crontab пользователя
+      ansible.builtin.cron:
+        name: "all_user_cron"
+        user: "{{ username }}"
+        state: absent
+      when: user_check.changed

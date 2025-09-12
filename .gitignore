@@ -1,0 +1,8 @@
+# Игнорируем все логи
+*.log
+
+# ansible hosts
+my-project/inventory/hosts
+
+#config
+ansible.cfg

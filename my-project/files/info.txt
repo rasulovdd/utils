@@ -1,0 +1,8 @@
+# Базовый запуск
+ansible-playbook -i inventory/hosts playbooks/create-user.yml
+
+# С указанием конкретного пользователя
+ansible-playbook -i inventory/hosts playbooks/create-user.yml -e "username=deploy"
+
+# С vault паролем
+ansible-playbook -i inventory/hosts playbooks/create-user.yml --ask-vault-pass
