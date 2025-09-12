@@ -1,0 +1,69 @@
+- name: Проверить и создать пользователя на удаленных серверах
+  hosts: ubuntu
+  become: yes
+  vars_prompt:
+    - name: username
+      prompt: "Введите имя пользователя для создания"
+      private: no
+    - name: ssh_key
+      prompt: "Введите SSH-ключ для пользователя"
+      private: no
+    - name: grant_sudo
+      prompt: "Добавить sudo права? (yes/no, по умолчанию no)"
+      private: no
+      default: "no"
+
+  tasks:
+    - name: Проверить, существует ли уже пользователь
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ username }}"
+      register: user_exists
+      ignore_errors: yes
+
+    - name: Создать пользователя, если его нет
+      ansible.builtin.user:
+        name: "{{ username }}"
+        state: present
+        create_home: yes
+        shell: /bin/bash
+      when: user_exists.failed
+
+    - name: Создать директорию .ssh
+      ansible.builtin.file:
+        path: "/home/{{ username }}/.ssh"
+        state: directory
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: '0700'
+      when: user_exists.failed
+
+    - name: Добавить SSH-ключ для пользователя
+      ansible.builtin.copy:
+        content: "{{ ssh_key }}\n"
+        dest: "/home/{{ username }}/.ssh/authorized_keys"
+        owner: "{{ username }}"
+        group: "{{ username }}"
+        mode: '0600'
+      when: user_exists.failed
+
+    - name: Добавить пользователя в группу sudo (если требуется)
+      ansible.builtin.user:
+        name: "{{ username }}"
+        groups: sudo
+        append: yes
+      when: 
+        - user_exists.failed
+        - grant_sudo == "yes"
+
+    - name: Сообщить, если пользователь уже существует
+      ansible.builtin.debug:
+        msg: "Пользователь {{ username }} уже существует"
+      when: user_exists.failed == false
+
+    - name: Сообщить о результате создания пользователя
+      ansible.builtin.debug:
+        msg: |
+          Пользователь {{ username }} создан успешно
+          Sudo права: {{ 'предоставлены' if grant_sudo == 'yes' else 'не предоставлены' }}
+      when: user_exists.failed
