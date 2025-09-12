@@ -1,33 +1,40 @@
 # utils
 Всякая всячина
 
-## index.html 
+  # index.html 
   ```bash
   curl -o index.html https://raw.githubusercontent.com/rasulovdd/utils/main/www/index.html
   ```
-## app-config.json
+  # app-config.json
+  ```bash
+  curl -o index.html https://raw.githubusercontent.com/rasulovdd/utils/main/www/app-config.json
+  ```
   после выгрузки не забудьте поменять переменные <br>
   "supportUrl": "https://t.me/yousupport" <br>
   "logoUrl": "https://web.ru/logo.png" <br>
   <br>
-  ```bash
-  curl -o index.html https://raw.githubusercontent.com/rasulovdd/utils/main/www/app-config.json
-  ```
   
-## папка ansible: my-project
-  скачать папку 
+  # папка ansible: my-project
+  ## клонировать весь репозиторий
   ```bash
-  wget -r -np -nH --cut-dirs=5 https://raw.githubusercontent.com/rasulovdd/utils/main/my-project/
+  git clone https://github.com/rasulovdd/utils.git
   ```
-
-  создаем свой конфиг
+  ## скопировать нужную папку
+  ```bash
+  cp -r utils/my-project/ .
+  ```
+  ## удалить остальной репозиторий
+  ```bash
+  rm -rf utils
+  ```
+  ## создать свой конфиг и отредактировать
   ```bash
   cd my-project
   cp ansible.cfg.sample ansible.cfg
   nano ansible.cfg
   ```
 
-  структура папки
+  ## структура папки
   ```info
   my-project/
   ├── inventory/   # файлы инвентаризации
