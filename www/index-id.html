@@ -804,24 +804,6 @@
         let panelData = null, appsConfig = null, currentLanguage = 'id', currentPlatform = 'android', toastTimeout = null, validPlatforms = [], branding = null;
 
         const translations = {
-            en: {
-                settings: 'Settings', get_link: 'Get Link', theme: 'Theme', language: 'Language',
-                light: 'Light', dark: 'Dark', auto: 'Auto',
-                username: 'Username', status: 'Status', expires_at: 'Expires', days_left: 'Days Left',
-                traffic_used: 'Traffic Used', traffic_limit: 'Traffic Limit', traffic_reset: 'Traffic Reset',
-                never_expires: 'Never expires', unlimited: 'Unlimited',
-                ACTIVE: 'Active', DISABLED: 'Disabled', LIMITED: 'Limited', EXPIRED: 'Expired',
-                NO_RESET: 'No reset', DAY: 'Daily', WEEK: 'Weekly', MONTH: 'Monthly',
-                subscription_links: 'Subscription Links', subscription_link: 'Subscription Link',
-                copy: 'Copy', qr_code: 'QR Code', copied: 'Copied!', scan_with_phone: 'Scan with your phone',
-                available_apps: 'Available Apps', other_apps: 'Other Apps', featured: 'Recommended',
-                install_app: 'Install and Run', add_subscription: 'Add Subscription', connect_use: 'Connect & Use',
-                ios: 'iOS', android: 'Android', windows: 'Windows', macos: 'macOS', linux: 'Linux',
-                androidTV: 'Android TV', appleTV: 'Apple TV',
-                no_data: 'No data to display', error_loading_apps: 'Error loading apps configuration',
-                step_install: 'Installation', step_add_subscription: 'Add Subscription', step_connect: 'Connect & Use',
-                close: 'Close', or: 'or', select_platform: 'Select Platform', support: 'Support', additional_step: 'Additional Step'
-            },
             id: {
                 settings: 'Pengaturan', get_link: 'Dapatkan Tautan', theme: 'Tema', language: 'Bahasa',
                 light: 'Terang', dark: 'Gelap', auto: 'Otomatis',
@@ -839,13 +821,31 @@
                 no_data: 'Tidak ada data untuk ditampilkan', error_loading_apps: 'Kesalahan memuat konfigurasi aplikasi',
                 step_install: 'Instalasi', step_add_subscription: 'Menambahkan Langganan', step_connect: 'Sambungkan & Gunakan',
                 close: 'Tutup', or: 'atau', select_platform: 'Pilih Platform', support: 'Dukungan', additional_step: 'Langkah Tambahan'
+            },
+            en: {
+                settings: 'Settings', get_link: 'Get Link', theme: 'Theme', language: 'Language',
+                light: 'Light', dark: 'Dark', auto: 'Auto',
+                username: 'Username', status: 'Status', expires_at: 'Expires', days_left: 'Days Left',
+                traffic_used: 'Traffic Used', traffic_limit: 'Traffic Limit', traffic_reset: 'Traffic Reset',
+                never_expires: 'Never expires', unlimited: 'Unlimited',
+                ACTIVE: 'Active', DISABLED: 'Disabled', LIMITED: 'Limited', EXPIRED: 'Expired',
+                NO_RESET: 'No reset', DAY: 'Daily', WEEK: 'Weekly', MONTH: 'Monthly',
+                subscription_links: 'Subscription Links', subscription_link: 'Subscription Link',
+                copy: 'Copy', qr_code: 'QR Code', copied: 'Copied!', scan_with_phone: 'Scan with your phone',
+                available_apps: 'Available Apps', other_apps: 'Other Apps', featured: 'Recommended',
+                install_app: 'Install and Run', add_subscription: 'Add Subscription', connect_use: 'Connect & Use',
+                ios: 'iOS', android: 'Android', windows: 'Windows', macos: 'macOS', linux: 'Linux',
+                androidTV: 'Android TV', appleTV: 'Apple TV',
+                no_data: 'No data to display', error_loading_apps: 'Error loading apps configuration',
+                step_install: 'Installation', step_add_subscription: 'Add Subscription', step_connect: 'Connect & Use',
+                close: 'Close', or: 'or', select_platform: 'Select Platform', support: 'Support', additional_step: 'Additional Step'
             }
         };
 
 
         const langFullNames = {
-            en: 'English',
-            id: 'Bahasa Indonesia'
+            id: 'Bahasa Indonesia',
+            en: 'English'
         };
 
         const appIcons = {
@@ -923,7 +923,7 @@
         function setupLanguageButtons() {
             const container = document.getElementById('languageButtons');
             container.innerHTML = '';
-            const baseLangs = ['en'];
+            const baseLangs = ['id'];
             const additionalLangs = appsConfig?.config?.additionalLocales || [];
             const allLangs = [...new Set([...baseLangs, ...additionalLangs])];
 
