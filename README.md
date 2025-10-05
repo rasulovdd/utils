@@ -12,3 +12,11 @@
   после выгрузки не забудьте поменять переменные <br>
   "supportUrl": "https://t.me/yousupport" <br>
   "logoUrl": "https://web.ru/logo.png" <br>
+
+---
+---
+  
+  # index-id.html 
+  ```bash
+  curl -o index.html https://raw.githubusercontent.com/rasulovdd/utils/main/www/index-id.html
+  ```
