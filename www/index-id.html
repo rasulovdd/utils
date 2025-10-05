@@ -789,7 +789,7 @@
                     <p data-key="scan_with_phone" style="margin-top: 1rem;">Scan with your phone</p>
                 </div>
                 <div class="step-buttons" style="justify-content: center; display: flex;">
-                     <button class="btn btn-primary" onclick="copySubscriptionUrl()">
+                    <button class="btn btn-primary" onclick="copySubscriptionUrl()">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
                         <span data-key="copy">Copy</span>
                     </button>
@@ -1149,14 +1149,20 @@
             const trafficLimitText = user.trafficLimit === "0" ? t('unlimited') : user.trafficLimit;
             const isActive = user.userStatus.toLowerCase() === 'active';
             
-            let userInfoRows = `<div class="info-row"><span class="info-value">${escapeHtml(user.username)}</span></div><span class="badge badge-${user.userStatus.toLowerCase()}">${t(user.userStatus)}</span></div>`;
+            //let userInfoRows = `
+            //    <div class="info-row"><span class="info-value">${escapeHtml(user.username)}</span></div>
+            //    <div class="info-row"><span class="info-label">${t('status')}</span><span class="badge badge-${user.userStatus.toLowerCase()}">${t(user.userStatus)}</span></div>
+            //`;
+
+            let userInfoRows = `<div class="info-row"><span class="info-value">${escapeHtml(user.username)}</span><span class="badge badge-${user.userStatus.toLowerCase()}">${t(user.userStatus)}</span></div>`;
             
             // Показываем дополнительные строки только если статус ACTIVE
+            // пример кода для отображение трафика
+            // <div class="info-row"><span class="info-label">${t('traffic_used')}</span><span class="info-value">${user.trafficUsed} / ${trafficLimitText}</span></div>
             if (isActive) {
                 userInfoRows += `
                     <div class="info-row"><span class="info-label">${t('expires_at')}</span><span class="info-value">${isNeverExpires ? t('never_expires') : formatDate(expiresDate)}</span> | 
                     ${!isNeverExpires ? `<span class="info-label">${t('days_left')}</span><span class="info-value">${user.daysLeft}</span></div>` : ''}
-                    <div class="info-row"><span class="info-label">${t('traffic_used')}</span><span class="info-value">${user.trafficUsed} / ${trafficLimitText}</span></div>
                 `;
             }
             
