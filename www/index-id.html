@@ -890,7 +890,7 @@
         
         function getBrowserLanguage() {
             const lang = (navigator.language || navigator.userLanguage).slice(0, 2);
-            return translations[lang] ? lang : 'id';
+            return translations[lang] ? lang : 'en';
         }
 
         function setTheme(theme) {
@@ -923,7 +923,7 @@
         function setupLanguageButtons() {
             const container = document.getElementById('languageButtons');
             container.innerHTML = '';
-            const baseLangs = ['id'];
+            const baseLangs = ['en'];
             const additionalLangs = appsConfig?.config?.additionalLocales || [];
             const allLangs = [...new Set([...baseLangs, ...additionalLangs])];
 
