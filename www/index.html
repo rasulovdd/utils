@@ -1148,17 +1148,20 @@ body {
             const trafficLimitText = user.trafficLimit === "0" ? t('unlimited') : user.trafficLimit;
             const isActive = user.userStatus.toLowerCase() === 'active';
             
-            let userInfoRows = `
-                <div class="info-row"><span class="info-label">${t('username')}</span><span class="info-value">${escapeHtml(user.username)}</span></div>
-                <div class="info-row"><span class="info-label">${t('status')}</span><span class="badge badge-${user.userStatus.toLowerCase()}">${t(user.userStatus)}</span></div>
-            `;
+            //let userInfoRows = `
+            //    <div class="info-row"><span class="info-value">${escapeHtml(user.username)}</span></div>
+            //    <div class="info-row"><span class="info-label">${t('status')}</span><span class="badge badge-${user.userStatus.toLowerCase()}">${t(user.userStatus)}</span></div>
+            //`;
             
+            let userInfoRows = `<div class="info-row"><span class="info-value">${escapeHtml(user.username)}</span><span class="badge badge-${user.userStatus.toLowerCase()}">${t(user.userStatus)}</span></div>`;
+
             // Показываем дополнительные строки только если статус ACTIVE
+            // пример кода для отображение трафика
+            // <div class="info-row"><span class="info-label">${t('traffic_used')}</span><span class="info-value">${user.trafficUsed} / ${trafficLimitText}</span></div>
             if (isActive) {
                 userInfoRows += `
                     <div class="info-row"><span class="info-label">${t('expires_at')}</span><span class="info-value">${isNeverExpires ? t('never_expires') : formatDate(expiresDate)}</span> | 
                     ${!isNeverExpires ? `<span class="info-label">${t('days_left')}</span><span class="info-value">${user.daysLeft}</span></div>` : ''}
-                    <div class="info-row"><span class="info-label">${t('traffic_used')}</span><span class="info-value">${user.trafficUsed} / ${trafficLimitText}</span></div>
                 `;
             }
             
