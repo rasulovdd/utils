@@ -52,20 +52,34 @@ install_nvidia_utils() {
         return 0
     fi
     
-    # Проверка установленных драйверов
-    if ! command -v nvidia-smi &> /dev/null; then
-        print_warning "nvidia-smi не найден. Установка nvidia-utils-580-server..."
-        apt update
-        apt install -y nvidia-utils-580-server
+    # Определяем установленную версию драйвера
+    local driver_version=""
+    
+    # Пробуем разные способы определения версии
+    if driver_version=$(dpkg -l | grep -oP 'nvidia-driver-\d+' | head -1 | grep -oP '\d+'); then
+        print_info "Определена версия драйвера через dpkg: $driver_version"
+    elif driver_version=$(apt list --installed 2>/dev/null | grep nvidia-driver | grep -oP '\d+' | head -1); then
+        print_info "Определена версия драйвера через apt: $driver_version"
     else
-        print_info "NVIDIA утилиты уже установлены"
+        print_warning "Не удалось определить версию драйвера. Используем версию 535 по умолчанию"
+        driver_version="535"
+    fi
+    
+    # Проверяем, установлены ли уже утилиты для этой версии
+    if dpkg -l | grep -q "nvidia-utils-${driver_version}"; then
+        print_info "NVIDIA утилиты для версии $driver_version уже установлены"
+    else
+        print_info "Установка nvidia-utils-${driver_version}-server..."
+        apt update
+        apt install -y "nvidia-utils-${driver_version}-server"
     fi
     
     # Проверка работы nvidia-smi
-    if nvidia-smi &> /dev/null; then
+    if timeout 10s nvidia-smi &> /dev/null; then
         print_info "NVIDIA утилиты успешно установлены и работают"
     else
         print_warning "NVIDIA утилиты установлены, но nvidia-smi не работает корректно"
+        print_info "Это может быть связано с необходимостью перезагрузки"
     fi
 }
 
@@ -83,7 +97,23 @@ create_gpu_script() {
 #!/bin/bash
 # Мониторинг GPU через nvidia-smi
 
-# Проверка наличия nvidia-smi
+# Функция для безопасного получения числового значения
+safe_number() {
+    local value="$1"
+    local default="$2"
+    
+    # Удаляем все нечисловые символы кроме минуса и точек
+    value=$(echo "$value" | sed 's/[^0-9.-]*//g')
+    
+    # Проверяем, что это число
+    if [[ "$value" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+        echo "$value"
+    else
+        echo "$default"
+    fi
+}
+
+# Проверка наличия nvidia-smi и его работоспособности
 if ! command -v nvidia-smi &> /dev/null; then
     echo "gpu_load:0"
     echo "vram_util:0"
@@ -91,20 +121,35 @@ if ! command -v nvidia-smi &> /dev/null; then
     exit 0
 fi
 
-# Получаем данные GPU
-GPU_LOAD=$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits | head -1 2>/dev/null || echo "0")
-VRAM_USED=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | head -1 2>/dev/null || echo "0")
-VRAM_TOTAL=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1 2>/dev/null || echo "1")
-GPU_TEMP=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits | head -1 2>/dev/null || echo "0")
+# Пытаемся получить данные с таймаутом
+GPU_DATA=$(timeout 10s nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null)
 
-# Проверка на пустые значения
-if [ -z "$GPU_LOAD" ]; then GPU_LOAD=0; fi
-if [ -z "$VRAM_USED" ]; then VRAM_USED=0; fi
-if [ -z "$VRAM_TOTAL" ]; then VRAM_TOTAL=1; fi
-if [ -z "$GPU_TEMP" ]; then GPU_TEMP=0; fi
+# Если команда не удалась или вернула ошибку
+if [ $? -ne 0 ] || [ -z "$GPU_DATA" ] || echo "$GPU_DATA" | grep -q "Failed"; then
+    echo "gpu_load:0"
+    echo "vram_util:0"
+    echo "gpu_temp:0"
+    exit 0
+fi
+
+# Извлекаем данные из первой строки
+GPU_LOAD=$(echo "$GPU_DATA" | head -1 | cut -d',' -f1 | tr -d ' ' | tr -d '%')
+VRAM_USED=$(echo "$GPU_DATA" | head -1 | cut -d',' -f2 | tr -d ' ' | tr -d 'MiB')
+VRAM_TOTAL=$(echo "$GPU_DATA" | head -1 | cut -d',' -f3 | tr -d ' ' | tr -d 'MiB')
+GPU_TEMP=$(echo "$GPU_DATA" | head -1 | cut -d',' -f4 | tr -d ' ' | tr -d 'C')
+
+# Безопасное преобразование в числа
+GPU_LOAD=$(safe_number "$GPU_LOAD" "0")
+VRAM_USED=$(safe_number "$VRAM_USED" "0")
+VRAM_TOTAL=$(safe_number "$VRAM_TOTAL" "1")
+GPU_TEMP=$(safe_number "$GPU_TEMP" "0")
 
 # Расчет использования VRAM
-VRAM_UTIL=$((VRAM_USED * 100 / VRAM_TOTAL))
+if [ "$VRAM_TOTAL" -gt 0 ] 2>/dev/null; then
+    VRAM_UTIL=$((VRAM_USED * 100 / VRAM_TOTAL))
+else
+    VRAM_UTIL=0
+fi
 
 echo "gpu_load:$GPU_LOAD"
 echo "vram_util:$VRAM_UTIL"
@@ -147,7 +192,7 @@ EOF
 configure_zabbix_parameters() {
     print_info "Настройка пользовательских параметров Zabbix..."
     
-    # Создаем конфигурационный файл
+    # Создаем конфигурационный файл (убрана рекурсивная директива Include)
     cat > /etc/zabbix/zabbix_agent2.d/gpu_docker.conf << 'EOF'
 # User parameters for GPU monitoring
 UserParameter=gpu.load[*],/etc/zabbix/scripts/gpu_stats.sh | grep gpu_load | cut -d':' -f2
@@ -158,9 +203,6 @@ UserParameter=gpu.temp[*],/etc/zabbix/scripts/gpu_stats.sh | grep gpu_temp | cut
 UserParameter=docker.running[*],/etc/zabbix/scripts/docker_stats.sh | grep docker_running | cut -d':' -f2
 UserParameter=docker.stopped[*],/etc/zabbix/scripts/docker_stats.sh | grep docker_stopped | cut -d':' -f2
 UserParameter=docker.total[*],/etc/zabbix/scripts/docker_stats.sh | grep docker_total | cut -d':' -f2
-
-# Include directory for additional configurations
-Include=/etc/zabbix/zabbix_agent2.d/*.conf
 EOF
 
     print_info "Конфигурационный файл создан: /etc/zabbix/zabbix_agent2.d/gpu_docker.conf"
@@ -191,9 +233,32 @@ test_scripts() {
     /etc/zabbix/scripts/docker_stats.sh
     
     echo "=== Тест Zabbix параметров ==="
-    zabbix_agent2 -t "gpu.load[]" | head -1
-    zabbix_agent2 -t "gpu.vram[]" | head -1
-    zabbix_agent2 -t "docker.running[]" | head -1
+    # Даем время агенту перезапуститься
+    sleep 2
+    
+    # Тестируем с правильным пользователем
+    sudo -u zabbix zabbix_agent2 -t "gpu.load[]" 2>/dev/null | head -1 || echo "GPU load test skipped"
+    sudo -u zabbix zabbix_agent2 -t "gpu.vram[]" 2>/dev/null | head -1 || echo "GPU vram test skipped"
+    sudo -u zabbix zabbix_agent2 -t "docker.running[]" 2>/dev/null | head -1 || echo "Docker running test skipped"
+}
+
+# Проверка работоспособности NVIDIA после установки
+check_nvidia_status() {
+    print_info "Проверка статуса NVIDIA..."
+    
+    if lspci | grep -i nvidia > /dev/null; then
+        echo "=== Информация об установленных драйверах NVIDIA ==="
+        dpkg -l | grep nvidia | head -5
+        
+        echo "=== Попытка запуска nvidia-smi ==="
+        if timeout 5s nvidia-smi &>/dev/null; then
+            print_info "NVIDIA работает корректно"
+            nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
+        else
+            print_warning "NVIDIA драйверы установлены, но требуют перезагрузки"
+            print_info "Выполните 'reboot' после завершения установки"
+        fi
+    fi
 }
 
 # Вывод информации для пользователя
@@ -207,6 +272,14 @@ show_final_info() {
     echo "  - docker.stopped[] - Остановленные контейнеры"
     echo "  - docker.total[] - Всего контейнеров"
     echo ""
+    
+    if lspci | grep -i nvidia > /dev/null; then
+        if ! timeout 5s nvidia-smi &>/dev/null; then
+            print_warning "Для работы мониторинга GPU требуется перезагрузка системы!"
+            print_info "Выполните: reboot"
+        fi
+    fi
+    
     print_warning "Не забудьте настроить элементы данных в Zabbix сервере!"
 }
 
@@ -223,6 +296,7 @@ main() {
     configure_zabbix_parameters
     restart_zabbix_agent
     test_scripts
+    check_nvidia_status
     show_final_info
     
     print_info "Установка успешно завершена!"
