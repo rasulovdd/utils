@@ -28,4 +28,6 @@
 
 ## Установке нужны права sudo 
   ```bash
-  bash <(curl -fsSL https://raw.githubusercontent.com/rasulovdd/utils/zabbix/install_mon.sh)
+  bash <(curl -fsSL https://raw.githubusercontent.com/rasulovdd/utils/main/zabbix/install_mon.sh)
+  ```
+  
