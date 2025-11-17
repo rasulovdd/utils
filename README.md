@@ -20,3 +20,12 @@
   ```bash
   curl -o index.html https://raw.githubusercontent.com/rasulovdd/utils/main/www/index-id.html
   ```
+
+---
+---
+
+# Автоматическая установка и настройка мониторинга GPU и Docker для Zabbix agent > 6
+
+## Установке нужны права sudo 
+  ```bash
+  bash <(curl -fsSL https://raw.githubusercontent.com/rasulovdd/utils/zabbix/install_mon.sh)
