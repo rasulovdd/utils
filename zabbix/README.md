@@ -16,3 +16,8 @@
   ```bash
   sudo usermod -aG docker zabbix
   ```
+
+## Добавление шаблона в zabbix сервер 
+  1. Скачайте шаблон Template App GPU and Docker.yaml
+  2. Zabbix -> Templates -> Import. Выберите файл и нажмите открыть
+  3. Добавьте этот шаблон к серверу которую хотите мониторить
