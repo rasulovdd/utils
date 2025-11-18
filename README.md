@@ -30,4 +30,3 @@
   ```bash
   bash <(curl -fsSL https://raw.githubusercontent.com/rasulovdd/utils/main/zabbix/install_mon.sh)
   ```
-  
