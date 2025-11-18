@@ -282,11 +282,6 @@ add_zabbix_to_docker() {
     # Повторная проверка
     if groups "$USER" | grep -q "\b$GROUP\b"; then
         print_info "Успешно: пользователь $USER добавлен в группу $GROUP"
-        
-        # Рекомендация по перезапуску
-        print_warning "Для применения новых прав необходимо:"
-        print_warning "  - Перезапустить Zabbix Agent2: sudo systemctl restart zabbix-agent2"
-        print_warning "  - ИЛИ перезагрузить систему: sudo reboot"
         return 0
     else
         print_error "Не удалось добавить $USER в группу $GROUP. Проверьте права sudo."

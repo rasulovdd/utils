@@ -29,7 +29,7 @@ zabbix_export:
           units: '%'
           triggers:
             - uuid: 6a5fafe2fea448edb98bcf1bc493b6f8
-              expression: 'last(/Template App GPU and Docker/gpu.load[],#2)>95'
+              expression: 'min(/Template App GPU and Docker/gpu.load[],5m)>95'
               name: 'High GPU Load (>95%)'
               priority: WARNING
         - uuid: 60ca4e1072404f85a93e240084f62527
