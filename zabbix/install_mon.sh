@@ -42,9 +42,9 @@ check_zabbix_agent() {
     fi
 }
 
-# Установка NVIDIA утилит
-install_nvidia_utils() {
-    print_info "Установка NVIDIA утилит..."
+# Проверка NVIDIA утилит
+check_nvidia_utils() {
+    print_info "Проверка наличия NVIDIA утилит..."
     
     # Проверка наличия NVIDIA GPU
     if ! lspci | grep -i nvidia > /dev/null; then
@@ -52,34 +52,20 @@ install_nvidia_utils() {
         return 0
     fi
     
-    # Определяем установленную версию драйвера
-    local driver_version=""
-    
-    # Пробуем разные способы определения версии
-    if driver_version=$(dpkg -l | grep -oP 'nvidia-driver-\d+' | head -1 | grep -oP '\d+'); then
-        print_info "Определена версия драйвера через dpkg: $driver_version"
-    elif driver_version=$(apt list --installed 2>/dev/null | grep nvidia-driver | grep -oP '\d+' | head -1); then
-        print_info "Определена версия драйвера через apt: $driver_version"
-    else
-        print_warning "Не удалось определить версию драйвера. Используем версию 535 по умолчанию"
-        driver_version="535"
+    # Проверка наличия nvidia-smi
+    if ! command -v nvidia-smi &> /dev/null; then
+        print_error "nvidia-smi не найден. Установите NVIDIA утилиты вручную:"
+        print_info "Ubuntu/Debian: sudo apt install nvidia-utils-*"
+        print_info "CentOS/RHEL: sudo yum install nvidia-utils"
+        exit 1
     fi
     
-    # Проверяем, установлены ли уже утилиты для этой версии
-    if dpkg -l | grep -q "nvidia-utils-${driver_version}"; then
-        print_info "NVIDIA утилиты для версии $driver_version уже установлены"
+    # Проверка работоспособности nvidia-smi
+    if ! timeout 10s nvidia-smi &> /dev/null; then
+        print_warning "nvidia-smi обнаружен, но не работает корректно"
+        print_info "Возможно, требуется перезагрузка или проверка драйверов"
     else
-        print_info "Установка nvidia-utils-${driver_version}-server..."
-        apt update
-        apt install -y "nvidia-utils-${driver_version}-server"
-    fi
-    
-    # Проверка работы nvidia-smi
-    if timeout 10s nvidia-smi &> /dev/null; then
-        print_info "NVIDIA утилиты успешно установлены и работают"
-    else
-        print_warning "NVIDIA утилиты установлены, но nvidia-smi не работает корректно"
-        print_info "Это может быть связано с необходимостью перезагрузки"
+        print_info "NVIDIA утилиты работают корректно"
     fi
 }
 
@@ -242,22 +228,69 @@ test_scripts() {
     sudo -u zabbix zabbix_agent2 -t "docker.running[]" 2>/dev/null | head -1 || echo "Docker running test skipped"
 }
 
-# Проверка работоспособности NVIDIA после установки
+# Проверка работоспособности NVIDIA
 check_nvidia_status() {
     print_info "Проверка статуса NVIDIA..."
     
     if lspci | grep -i nvidia > /dev/null; then
         echo "=== Информация об установленных драйверах NVIDIA ==="
-        dpkg -l | grep nvidia | head -5
+        if command -v nvidia-smi &> /dev/null; then
+            nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
+        else
+            print_warning "nvidia-smi не найден"
+        fi
         
         echo "=== Попытка запуска nvidia-smi ==="
         if timeout 5s nvidia-smi &>/dev/null; then
             print_info "NVIDIA работает корректно"
-            nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
         else
-            print_warning "NVIDIA драйверы установлены, но требуют перезагрузки"
-            print_info "Выполните 'reboot' после завершения установки"
+            print_warning "NVIDIA драйверы обнаружены, но nvidia-smi не работает"
+            print_info "Возможно, требуется перезагрузка системы"
         fi
+    fi
+}
+
+# Добавление пользователя zabbix в группу docker
+add_zabbix_to_docker() {
+    print_info "Проверка и настройка доступа Zabbix к Docker..."
+
+    local USER="zabbix"
+    local GROUP="docker"
+
+    # Проверка существования пользователя
+    if ! id "$USER" &>/dev/null; then
+        print_error "Пользователь $USER не существует. Невозможно настроить доступ к Docker."
+        return 1
+    fi
+
+    # Проверка существования группы docker
+    if ! getent group "$GROUP" &>/dev/null; then
+        print_warning "Группа $GROUP не существует. Docker не установлен или установлен нестандартно."
+        return 0
+    fi
+
+    # Проверка, состоит ли пользователь уже в группе
+    if groups "$USER" | grep -q "\b$GROUP\b"; then
+        print_info "Пользователь $USER уже имеет доступ к Docker (входит в группу $GROUP)"
+        return 0
+    fi
+
+    # Добавление в группу
+    print_info "Добавляем пользователя $USER в группу $GROUP..."
+    sudo usermod -aG "$GROUP" "$USER"
+
+    # Повторная проверка
+    if groups "$USER" | grep -q "\b$GROUP\b"; then
+        print_info "Успешно: пользователь $USER добавлен в группу $GROUP"
+        
+        # Рекомендация по перезапуску
+        print_warning "Для применения новых прав необходимо:"
+        print_warning "  - Перезапустить Zabbix Agent2: sudo systemctl restart zabbix-agent2"
+        print_warning "  - ИЛИ перезагрузить систему: sudo reboot"
+        return 0
+    else
+        print_error "Не удалось добавить $USER в группу $GROUP. Проверьте права sudo."
+        return 1
     fi
 }
 
@@ -289,11 +322,12 @@ main() {
     
     check_root
     check_zabbix_agent
-    install_nvidia_utils
+    check_nvidia_utils
     create_directories
     create_gpu_script
     create_docker_script
     configure_zabbix_parameters
+    add_zabbix_to_docker
     restart_zabbix_agent
     test_scripts
     check_nvidia_status
