@@ -1,0 +1,73 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: 6bdf2c96bf374172a0e108c0e1ddb355
+      name: My_Temp
+  templates:
+    - uuid: 121d5f13fd0e463cb5b86c8367c7d552
+      template: 'Template App GPU and Docker'
+      name: 'Template App GPU and Docker'
+      groups:
+        - name: My_Temp
+      items:
+        - uuid: d949d895870c45e6a99049872f2fddd1
+          name: 'Docker Running Containers'
+          key: 'docker.running[]'
+          trends: 180d
+        - uuid: ea1a182b50014e61b5f2c64550e3f817
+          name: 'Docker Stopped Containers'
+          key: 'docker.stopped[]'
+          triggers:
+            - uuid: c2ed23676070425983b3fab4d2214144
+              expression: 'last(/Template App GPU and Docker/docker.stopped[],#2)>0'
+              name: 'Stopped Containers Detected'
+              priority: INFO
+        - uuid: 57c0f5d8c68e4921b429995e59a2a0e3
+          name: 'GPU Load (%)'
+          key: 'gpu.load[]'
+          trends: 180d
+          units: '%'
+          triggers:
+            - uuid: 6a5fafe2fea448edb98bcf1bc493b6f8
+              expression: 'last(/Template App GPU and Docker/gpu.load[],#2)>95'
+              name: 'High GPU Load (>95%)'
+              priority: WARNING
+        - uuid: 60ca4e1072404f85a93e240084f62527
+          name: 'VRAM Utilization (%)'
+          key: 'gpu.vram[]'
+          trends: 180d
+          units: '%'
+      tags:
+        - tag: docker
+          value: '1'
+        - tag: gpu
+          value: '1'
+  graphs:
+    - uuid: 41131ccc475442aa820a3da7886689bb
+      name: 'Docker Containers Status'
+      graph_items:
+        - color: 1A7C11
+          calc_fnc: ALL
+          item:
+            host: 'Template App GPU and Docker'
+            key: 'docker.running[]'
+        - sortorder: '1'
+          color: '274482'
+          calc_fnc: ALL
+          item:
+            host: 'Template App GPU and Docker'
+            key: 'docker.stopped[]'
+    - uuid: b1c12ac0a09b41e79a13367064952764
+      name: 'GPU and VRAM Usage'
+      graph_items:
+        - color: 1A7C11
+          calc_fnc: ALL
+          item:
+            host: 'Template App GPU and Docker'
+            key: 'gpu.load[]'
+        - sortorder: '1'
+          color: '274482'
+          calc_fnc: ALL
+          item:
+            host: 'Template App GPU and Docker'
+            key: 'gpu.vram[]'
