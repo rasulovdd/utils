@@ -34,5 +34,5 @@
 ---
 ---
 
-- Мониторинг DHCP‑сервера Microsoft через Zabbix -> [ссылка] 
+- Мониторинг DHCP‑сервера Microsoft через Zabbix -> [ссылка] (https://github.com/rasulovdd/utils/blob/main/zabbix/Microsoft_DHCP/README.md)
 
