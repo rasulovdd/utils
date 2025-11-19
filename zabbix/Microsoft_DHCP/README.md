@@ -1,4 +1,4 @@
-# Template_App_Microsoft_DHCP
+# Мониторинг DHCP‑сервера Microsoft через Zabbix
 
 Этот шаблон использует командлеты PowerShell для однократного получения всей информации о Microsoft DHCP Server и отправки её на сервер/прокси Zabbix в формате JSON.
     

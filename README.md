@@ -30,3 +30,9 @@
   ```bash
   bash <(curl -fsSL https://raw.githubusercontent.com/rasulovdd/utils/main/zabbix/install_mon.sh)
   ```
+
+---
+---
+
+- Мониторинг DHCP‑сервера Microsoft через Zabbix -> [ссылка] 
+
