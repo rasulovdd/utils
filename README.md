@@ -23,16 +23,14 @@
 
 ---
 ---
+# Zabbix
 
-# Автоматическая установка и настройка мониторинга GPU и Docker для Zabbix agent > 6
-
-## Установке нужны права sudo 
-  ```bash
-  bash <(curl -fsSL https://raw.githubusercontent.com/rasulovdd/utils/main/zabbix/install_mon.sh)
-  ```
+- Автоматическая установка и настройка мониторинга GPU и Docker для Zabbix agent2 <br/>
+  [ссылка](https://github.com/rasulovdd/utils/blob/main/zabbix/README.md)
 
 ---
+
+- Мониторинг DHCP‑сервера Microsoft через Zabbix <br/>
+[ссылка](https://github.com/rasulovdd/utils/blob/main/zabbix/Microsoft_DHCP/README.md)
+
 ---
-
-- Мониторинг DHCP‑сервера Microsoft через Zabbix -> [ссылка] (https://github.com/rasulovdd/utils/blob/main/zabbix/Microsoft_DHCP/README.md)
-

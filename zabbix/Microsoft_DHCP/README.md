@@ -29,3 +29,7 @@
     UnsafeUserParameters=1 
     AllowKey=system.run[*]
     ```
+
+## Шаблон 
+
+- Template_App_Microsoft_DHCP.yaml

@@ -25,6 +25,6 @@
   3. Добавьте этот шаблон к серверу которую хотите мониторить
 
 
-## Шаблоны 
+## Шаблон 
 
-  1. Template_App_GPU_and_Docker.yaml - мониторинг GPU и докер
+- Template_App_GPU_and_Docker.yaml
