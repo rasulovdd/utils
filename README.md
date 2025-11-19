@@ -26,11 +26,11 @@
 # Zabbix
 
 - Автоматическая установка и настройка мониторинга GPU и Docker для Zabbix agent2 <br/>
-  [ссылка](https://github.com/rasulovdd/utils/blob/main/zabbix/README.md)
+  [ссылка](https://github.com/rasulovdd/utils/blob/main/zabbix/)
 
 ---
 
 - Мониторинг DHCP‑сервера Microsoft через Zabbix <br/>
-[ссылка](https://github.com/rasulovdd/utils/blob/main/zabbix/Microsoft_DHCP/README.md)
+[ссылка](https://github.com/rasulovdd/utils/blob/main/zabbix/Microsoft_DHCP/)
 
 ---
