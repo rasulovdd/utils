@@ -20,7 +20,7 @@ show_header() {
     echo "│ ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚══════╝ ╚═════╝   ╚═══╝  ╚═════╝ ╚═════╝  │"
     echo "└─────────────────────────────────────────────────────────────────────────────┘"
     echo "zabbix-agent2 insteller by rasulovdd"
-    echo "Проект: https://github.com/rasulovdd/utils/zabbix/install/"
+    echo "Проект: https://github.com/rasulovdd/utils/tree/main/zabbix/install/"
     echo "Контакты: @RasulovDD"
     echo -e "${BLUE}"
     echo "╔════════════════════════════════════════════════╗"

@@ -16,7 +16,7 @@
     │ ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚══════╝ ╚═════╝   ╚═══╝  ╚═════╝ ╚═════╝  │
     └─────────────────────────────────────────────────────────────────────────────┘
     zabbix-agent2 installer by rasulovdd
-    Проект: https://github.com/rasulovdd/utils/zabbix/install/
+    Проект: https://github.com/rasulovdd/utils/tree/main/zabbix/install/
     Контакты: @RasulovDD
 
     ╔════════════════════════════════════════════════╗
