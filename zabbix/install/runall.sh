@@ -37,8 +37,10 @@ REMOVE_CONFIG="n"
 REMOVE_REPO="n"
 
 ACTION=""
-
 TMP_REPO_PKG="/tmp/zabbix-release.pkg"
+
+# repo, которые можно отключить, если они ломают dnf
+DNF_BROKEN_REPOS_PATTERN="rpmfusion*"
 
 # =========================================================
 # Логирование
@@ -96,7 +98,7 @@ init_log() {
         echo -e "${RED}[ОШИБКА] Не удалось создать лог-файл: $LOG_FILE${NC}"
         exit 1
     }
-    log_info "Запуск Zabbix Agent2 Installer v1.3 Enterprise"
+    log_info "Запуск Zabbix Agent2 Installer v1.3 Enterprise Fixed"
 }
 
 # =========================================================
@@ -114,7 +116,7 @@ show_header() {
     echo "└─────────────────────────────────────────────────────────────────────────────┘"
     echo "zabbix-agent2 installer by rasulovdd"
     echo "Контакты: @RasulovDD"
-    echo "Версия: 1.3 Enterprise"
+    echo "Версия: 1.3 Enterprise Fixed"
     echo -e "${NC}"
 }
 
@@ -252,6 +254,60 @@ get_repo_url() {
 }
 
 # =========================================================
+# dnf safe helpers
+# =========================================================
+dnf_makecache_safe() {
+    if dnf makecache -y; then
+        log_success "dnf cache успешно обновлён"
+        return 0
+    fi
+
+    log_warn "Обычное обновление dnf cache не удалось, пробую без ${DNF_BROKEN_REPOS_PATTERN} ..."
+
+    if dnf makecache -y --disablerepo="${DNF_BROKEN_REPOS_PATTERN}"; then
+        log_success "dnf cache обновлён без ${DNF_BROKEN_REPOS_PATTERN}"
+        return 0
+    fi
+
+    log_error "Не удалось обновить dnf cache даже без ${DNF_BROKEN_REPOS_PATTERN}"
+    return 1
+}
+
+dnf_install_safe() {
+    local package_name="$1"
+
+    if dnf install -y "$package_name"; then
+        return 0
+    fi
+
+    log_warn "Обычная установка '$package_name' не удалась, пробую без ${DNF_BROKEN_REPOS_PATTERN} ..."
+
+    if dnf install -y "$package_name" --disablerepo="${DNF_BROKEN_REPOS_PATTERN}"; then
+        return 0
+    fi
+
+    log_error "Не удалось установить '$package_name' даже без ${DNF_BROKEN_REPOS_PATTERN}"
+    return 1
+}
+
+dnf_remove_safe() {
+    local package_name="$1"
+
+    if dnf remove -y "$package_name"; then
+        return 0
+    fi
+
+    log_warn "Обычное удаление '$package_name' не удалось, пробую без ${DNF_BROKEN_REPOS_PATTERN} ..."
+
+    if dnf remove -y "$package_name" --disablerepo="${DNF_BROKEN_REPOS_PATTERN}"; then
+        return 0
+    fi
+
+    log_error "Не удалось удалить '$package_name' даже без ${DNF_BROKEN_REPOS_PATTERN}"
+    return 1
+}
+
+# =========================================================
 # Пакетные операции
 # =========================================================
 install_repo() {
@@ -283,10 +339,7 @@ install_repo() {
                 log_error "Не удалось установить rpm репозиторий"
                 return 1
             }
-            dnf makecache -y || {
-                log_error "Не удалось обновить dnf cache"
-                return 1
-            }
+            dnf_makecache_safe || return 1
             ;;
     esac
 
@@ -299,7 +352,7 @@ install_agent_package() {
             apt install -y zabbix-agent2 || return 1
             ;;
         dnf)
-            dnf install -y zabbix-agent2 || return 1
+            dnf_install_safe "zabbix-agent2" || return 1
             ;;
     esac
 }
@@ -311,7 +364,7 @@ remove_agent_package() {
             apt autoremove -y || true
             ;;
         dnf)
-            dnf remove -y zabbix-agent2 || return 1
+            dnf_remove_safe "zabbix-agent2" || return 1
             ;;
     esac
 }
@@ -323,7 +376,7 @@ remove_repo_package() {
             apt autoremove -y || true
             ;;
         dnf)
-            dnf remove -y zabbix-release || true
+            dnf_remove_safe "zabbix-release" || true
             ;;
     esac
 }
