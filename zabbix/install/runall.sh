@@ -22,6 +22,8 @@ LOG_MAX_SIZE=$((1024 * 1024))
 LOG_ROTATE_COUNT=5
 
 OS_ID=""
+OS_ID_LIKE=""
+OS_FAMILY=""          # ubuntu | debian | rhel
 OS_VERSION_ID=""
 OS_MAJOR=""
 OS_PRETTY_NAME=""
@@ -37,10 +39,14 @@ REMOVE_CONFIG="n"
 REMOVE_REPO="n"
 
 ACTION=""
-TMP_REPO_PKG="/tmp/zabbix-release.pkg"
+TMP_REPO_PKG=""
 
 # repo, которые можно отключить, если они ломают dnf
 DNF_BROKEN_REPOS_PATTERN="rpmfusion*"
+
+# Не позволяем apt/dpkg задавать интерактивные вопросы
+export DEBIAN_FRONTEND=noninteractive
+export DEBIAN_PRIORITY=critical
 
 # =========================================================
 # Логирование
@@ -70,7 +76,7 @@ log_raw() {
     local ts
     ts="$(date '+%F %T')"
     rotate_log
-    echo "[$ts] [$level] $message" >> "$LOG_FILE"
+    echo "[$ts] [$level] $message" >> "$LOG_FILE" 2>/dev/null || true
 }
 
 log_info() {
@@ -98,7 +104,7 @@ init_log() {
         echo -e "${RED}[ОШИБКА] Не удалось создать лог-файл: $LOG_FILE${NC}"
         exit 1
     }
-    log_info "Запуск Zabbix Agent2 Installer v1.3 Enterprise Fixed"
+    log_info "Запуск Zabbix Agent2 Installer v1.4 Universal"
 }
 
 # =========================================================
@@ -116,7 +122,7 @@ show_header() {
     echo "└─────────────────────────────────────────────────────────────────────────────┘"
     echo "zabbix-agent2 installer by rasulovdd"
     echo "Контакты: @RasulovDD"
-    echo "Версия: 1.3 Enterprise Fixed"
+    echo "Версия: 1.4 Universal"
     echo -e "${NC}"
 }
 
@@ -126,14 +132,6 @@ show_header() {
 check_root() {
     if [ "${EUID:-$(id -u)}" -ne 0 ]; then
         echo -e "${RED}[ОШИБКА] Запустите скрипт от root или через sudo${NC}"
-        exit 1
-    fi
-}
-
-require_cmd() {
-    local cmd="$1"
-    if ! command -v "$cmd" >/dev/null 2>&1; then
-        log_error "Не найдена команда: $cmd"
         exit 1
     fi
 }
@@ -160,38 +158,110 @@ detect_os() {
     . /etc/os-release
 
     OS_ID="${ID:-}"
+    OS_ID_LIKE="${ID_LIKE:-}"
     OS_VERSION_ID="${VERSION_ID:-}"
     OS_PRETTY_NAME="${PRETTY_NAME:-unknown}"
     OS_MAJOR="${OS_VERSION_ID%%.*}"
 
+    # Определяем "семью" ОС: реальный ID + производные через ID_LIKE.
+    # Это позволяет работать не только с Ubuntu/Debian/RHEL напрямую,
+    # но и с производными дистрибутивами (Mint, Pop!_OS, Oracle Linux и т.д.)
     case "$OS_ID" in
-        ubuntu|debian)
+        ubuntu)
+            OS_FAMILY="ubuntu"
             PKG_MANAGER="apt"
             ;;
-        rocky|almalinux|rhel)
+        debian)
+            OS_FAMILY="debian"
+            PKG_MANAGER="apt"
+            ;;
+        rocky|almalinux|rhel|centos|ol)
+            OS_FAMILY="rhel"
             PKG_MANAGER="dnf"
             ;;
         *)
-            log_warn "ОС не входит в список официально поддерживаемых: $OS_PRETTY_NAME"
-            if ! confirm "Продолжить"; then
-                exit 0
+            if echo "$OS_ID_LIKE" | grep -qiw "ubuntu"; then
+                OS_FAMILY="ubuntu"
+                PKG_MANAGER="apt"
+            elif echo "$OS_ID_LIKE" | grep -qiw "debian"; then
+                OS_FAMILY="debian"
+                PKG_MANAGER="apt"
+            elif echo "$OS_ID_LIKE" | grep -Eqiw "rhel|fedora|centos"; then
+                OS_FAMILY="rhel"
+                PKG_MANAGER="dnf"
+            else
+                log_warn "ОС не входит в список официально поддерживаемых: $OS_PRETTY_NAME"
+                if ! confirm "Продолжить"; then
+                    exit 0
+                fi
+                # Лучшая догадка по наличию пакетного менеджера
+                if command -v apt >/dev/null 2>&1; then
+                    OS_FAMILY="debian"
+                    PKG_MANAGER="apt"
+                elif command -v dnf >/dev/null 2>&1; then
+                    OS_FAMILY="rhel"
+                    PKG_MANAGER="dnf"
+                else
+                    log_error "Не удалось определить пакетный менеджер (apt/dnf не найдены)"
+                    exit 1
+                fi
             fi
             ;;
     esac
 
-    log_info "Определена ОС: $OS_PRETTY_NAME"
+    log_info "Определена ОС: $OS_PRETTY_NAME (ID=$OS_ID, семья=$OS_FAMILY)"
     log_info "Пакетный менеджер: $PKG_MANAGER"
 }
 
 # =========================================================
-# Проверка зависимостей
+# Проверка/установка зависимостей
 # =========================================================
+# В отличие от старой версии, отсутствующие утилиты не считаются
+# фатальной ошибкой — скрипт пытается доустановить их сам.
+# Это чинит частый случай: минимальные облачные образы Ubuntu/Debian
+# без gnupg/wget, из-за чего apt update падает на проверке подписи репо.
+ensure_base_packages() {
+    local missing=()
+
+    for cmd in wget curl gnupg; do
+        command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+    done
+
+    if [ "${#missing[@]}" -eq 0 ]; then
+        return 0
+    fi
+
+    log_warn "Отсутствуют утилиты: ${missing[*]}. Пробую установить..."
+
+    case "$PKG_MANAGER" in
+        apt)
+            apt_retry apt-get update -o Acquire::Retries=3 -y || true
+            apt_retry apt-get install -y -o Acquire::Retries=3 \
+                wget curl gnupg ca-certificates apt-transport-https || {
+                log_warn "Не удалось установить часть базовых пакетов через apt, продолжаю с тем что есть"
+            }
+            ;;
+        dnf)
+            dnf install -y wget curl gnupg2 ca-certificates || {
+                log_warn "Не удалось установить часть базовых пакетов через dnf, продолжаю с тем что есть"
+            }
+            ;;
+    esac
+}
+
+require_cmd() {
+    local cmd="$1"
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        log_error "Не найдена команда: $cmd (не удалось установить автоматически)"
+        exit 1
+    fi
+}
+
 check_dependencies() {
     require_cmd awk
     require_cmd grep
     require_cmd sed
     require_cmd systemctl
-    require_cmd wget
     require_cmd hostname
 
     case "$PKG_MANAGER" in
@@ -204,51 +274,200 @@ check_dependencies() {
             require_cmd rpm
             ;;
     esac
+
+    ensure_base_packages
+    require_cmd wget
 }
 
 # =========================================================
-# URL репозитория
+# Синхронизация времени
 # =========================================================
-get_repo_url() {
-    case "${OS_ID}:${OS_MAJOR}:${ZABBIX_VERSION}" in
-        ubuntu:24:7.0)
-            echo "https://repo.zabbix.com/zabbix/7.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.0+ubuntu24.04_all.deb"
+# Частая причина провала проверки GPG-подписи репозитория на свежих
+# ВМ — некорректное системное время (ещё не синхронизировано по NTP).
+# Проверяем это заранее и по возможности чиним, не считая фатальным.
+ensure_time_sync() {
+    if ! command -v timedatectl >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local ntp_active
+    ntp_active="$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo "")"
+
+    if [ "$ntp_active" != "yes" ]; then
+        log_warn "Системное время не синхронизировано по NTP, включаю синхронизацию"
+        timedatectl set-ntp true >/dev/null 2>&1 || true
+        sleep 2
+    fi
+}
+
+# =========================================================
+# Запуск apt/dnf с логированием реального вывода и ожиданием
+# освобождения dpkg/apt lock
+# =========================================================
+# На свежих Ubuntu/Debian серверах в первые минуты после старта часто
+# работает unattended-upgrades/apt-daily и держит dpkg lock — apt
+# в этот момент падает почти мгновенно с "Could not get lock ...".
+# Раньше скрипт эту причину не показывал (терялся сам текст ошибки),
+# из-за чего "apt install zabbix-agent2" падал без объяснений.
+apt_retry() {
+    local max_wait=180
+    local waited=0
+    local output
+    local rc
+
+    while true; do
+        output="$("$@" 2>&1)"
+        rc=$?
+
+        if [ "$rc" -eq 0 ]; then
+            [ -n "$output" ] && log_raw "OUT" "$output"
+            return 0
+        fi
+
+        if echo "$output" | grep -qiE "could not get lock|dpkg frontend lock|resource temporarily unavailable|is another process using it"; then
+            if [ "$waited" -ge "$max_wait" ]; then
+                log_raw "OUT" "$output"
+                log_error "apt/dpkg lock удерживается другим процессом дольше ${max_wait}с (unattended-upgrades / apt-daily?), прерываю"
+                return 1
+            fi
+            log_warn "apt/dpkg занят другим процессом (unattended-upgrades / apt-daily), жду 10с... (${waited}/${max_wait}с)"
+            sleep 10
+            waited=$((waited + 10))
+            continue
+        fi
+
+        log_raw "OUT" "$output"
+        return "$rc"
+    done
+}
+
+# =========================================================
+# Скачивание с ретраями + проверка, что файл — настоящий пакет
+# =========================================================
+# repo.zabbix.com у части провайдеров (например РФ-хостеров) отдаёт
+# транзитные сетевые ошибки (TLS/socket сбои вроде "Could not wait for
+# server fd - select"), которые пропадают при повторной попытке.
+# Поэтому вместо отдельного лёгкого HEAD-запроса (который сам может
+# словить такую ошибку и ложно забраковать рабочий URL) сразу пробуем
+# скачать файл несколько раз и проверяем, что это не пустышка/страница
+# ошибки, а настоящий .deb/.rpm.
+is_valid_package_file() {
+    local file="$1"
+
+    [ -s "$file" ] || return 1
+    local size
+    size="$(stat -c%s "$file" 2>/dev/null || echo 0)"
+    [ "$size" -ge 1000 ] || return 1
+
+    case "$file" in
+        *.deb)
+            [ "$(head -c 7 "$file" 2>/dev/null)" = "!<arch>" ]
             ;;
-        ubuntu:22:7.0)
-            echo "https://repo.zabbix.com/zabbix/7.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.0+ubuntu22.04_all.deb"
-            ;;
-        debian:12:7.0)
-            echo "https://repo.zabbix.com/zabbix/7.0/debian/pool/main/z/zabbix-release/zabbix-release_latest_7.0+debian12_all.deb"
-            ;;
-        debian:11:7.0)
-            echo "https://repo.zabbix.com/zabbix/7.0/debian/pool/main/z/zabbix-release/zabbix-release_latest_7.0+debian11_all.deb"
-            ;;
-        rocky:9:7.0|almalinux:9:7.0|rhel:9:7.0)
-            echo "https://repo.zabbix.com/zabbix/7.0/rhel/9/x86_64/zabbix-release-latest-7.0.el9.noarch.rpm"
-            ;;
-        rocky:8:7.0|almalinux:8:7.0|rhel:8:7.0)
-            echo "https://repo.zabbix.com/zabbix/7.0/rhel/8/x86_64/zabbix-release-latest-7.0.el8.noarch.rpm"
-            ;;
-        ubuntu:24:6.0)
-            echo "https://repo.zabbix.com/zabbix/6.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_6.0+ubuntu24.04_all.deb"
-            ;;
-        ubuntu:22:6.0)
-            echo "https://repo.zabbix.com/zabbix/6.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_6.0+ubuntu22.04_all.deb"
-            ;;
-        debian:12:6.0)
-            echo "https://repo.zabbix.com/zabbix/6.0/debian/pool/main/z/zabbix-release/zabbix-release_latest_6.0+debian12_all.deb"
-            ;;
-        debian:11:6.0)
-            echo "https://repo.zabbix.com/zabbix/6.0/debian/pool/main/z/zabbix-release/zabbix-release_latest_6.0+debian11_all.deb"
-            ;;
-        rocky:9:6.0|almalinux:9:6.0|rhel:9:6.0)
-            echo "https://repo.zabbix.com/zabbix/6.0/rhel/9/x86_64/zabbix-release-latest-6.0.el9.noarch.rpm"
-            ;;
-        rocky:8:6.0|almalinux:8:6.0|rhel:8:6.0)
-            echo "https://repo.zabbix.com/zabbix/6.0/rhel/8/x86_64/zabbix-release-latest-6.0.el8.noarch.rpm"
+        *.rpm)
+            local magic
+            magic="$(head -c 4 "$file" 2>/dev/null | od -An -tx1 | tr -d ' \n')"
+            [ "$magic" = "edabeedb" ]
             ;;
         *)
+            return 0
+            ;;
+    esac
+}
+
+download_with_retry() {
+    local url="$1"
+    local dest="$2"
+    local attempts=3
+    local i
+
+    for ((i = 1; i <= attempts; i++)); do
+        rm -f "$dest"
+
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL --retry 2 --connect-timeout 15 --max-time 60 -o "$dest" "$url" 2>>"$LOG_FILE"
+        elif command -v wget >/dev/null 2>&1; then
+            wget -q --timeout=30 --tries=2 -O "$dest" "$url" 2>>"$LOG_FILE"
+        else
             return 1
+        fi
+
+        if is_valid_package_file "$dest"; then
+            return 0
+        fi
+
+        if [ "$i" -lt "$attempts" ]; then
+            log_warn "Попытка ${i}/${attempts} скачать ${url} не удалась (похоже на временный сетевой сбой), повтор через 5с..."
+            sleep 5
+        fi
+    done
+
+    rm -f "$dest"
+    return 1
+}
+
+# =========================================================
+# Динамическое построение URL репозитория Zabbix + скачивание
+# =========================================================
+# Вместо жёсткой таблицы "ОС:версия -> URL" (которая ломается на
+# каждой новой версии ОС/Zabbix) строим кандидатов по известным
+# шаблонам имён пакетов в repo.zabbix.com и пробуем скачать каждый,
+# пока один не окажется рабочим пакетом.
+fetch_repo_package() {
+    local dest="$1"
+    local base="https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}"
+    local candidates=()
+
+    case "$OS_FAMILY" in
+        ubuntu|debian)
+            local distro_dir="$OS_FAMILY"
+            local suffix="${OS_ID}${OS_VERSION_ID}"
+            candidates+=(
+                "${base}/${distro_dir}/pool/main/z/zabbix-release/zabbix-release_latest_${ZABBIX_VERSION}+${suffix}_all.deb"
+                "${base}/${distro_dir}/pool/main/z/zabbix-release/zabbix-release_latest+${suffix}_all.deb"
+                "${base}/release/${distro_dir}/pool/main/z/zabbix-release/zabbix-release_latest_${ZABBIX_VERSION}+${suffix}_all.deb"
+            )
+            ;;
+        rhel)
+            candidates+=(
+                "${base}/rhel/${OS_MAJOR}/x86_64/zabbix-release-latest-${ZABBIX_VERSION}.el${OS_MAJOR}.noarch.rpm"
+                "${base}/rhel/${OS_MAJOR}/x86_64/zabbix-release-${ZABBIX_VERSION}-1.el${OS_MAJOR}.noarch.rpm"
+            )
+            ;;
+        *)
+            log_error "Неизвестная семья ОС для построения URL репозитория: $OS_FAMILY"
+            return 1
+            ;;
+    esac
+
+    local url
+    for url in "${candidates[@]}"; do
+        log_info "Пробую скачать репозиторий: $url"
+        if download_with_retry "$url" "$dest"; then
+            log_success "Скачано: $url"
+            RESOLVED_REPO_URL="$url"
+            return 0
+        fi
+        log_warn "Не удалось скачать (или это не валидный пакет): $url"
+    done
+
+    return 1
+}
+
+# =========================================================
+# Очистка старых/битых записей репозитория Zabbix
+# =========================================================
+# Если раньше на этой машине уже пытались ставить Zabbix (вручную или
+# другим скриптом) под неверную версию ОС, в apt/dnf остаются файлы
+# с неверным кодовым именем (например "noble" на Ubuntu 22.04 "jammy"),
+# из-за которых apt update стабильно шлёт ошибки/предупреждения по
+# repo.zabbix.com. Убираем их перед установкой свежего репозитория.
+clean_stale_zabbix_repo() {
+    case "$PKG_MANAGER" in
+        apt)
+            rm -f /etc/apt/sources.list.d/zabbix*.list /etc/apt/sources.list.d/zabbix*.sources 2>/dev/null
+            ;;
+        dnf)
+            rm -f /etc/yum.repos.d/zabbix*.repo 2>/dev/null
             ;;
     esac
 }
@@ -307,32 +526,50 @@ dnf_remove_safe() {
     return 1
 }
 
+apt_update_safe() {
+    if apt_retry apt-get update -o Acquire::Retries=3; then
+        return 0
+    fi
+
+    log_warn "apt update не удался, пробую с --allow-releaseinfo-change ..."
+    if apt_retry apt-get update -o Acquire::Retries=3 --allow-releaseinfo-change; then
+        return 0
+    fi
+
+    log_error "apt update не удался"
+    return 1
+}
+
 # =========================================================
 # Пакетные операции
 # =========================================================
 install_repo() {
-    local repo_url
-    repo_url="$(get_repo_url)" || {
-        log_error "Не найден URL репозитория для ${OS_ID} ${OS_VERSION_ID} и Zabbix ${ZABBIX_VERSION}"
-        return 1
-    }
+    clean_stale_zabbix_repo
 
-    log_info "Скачивание репозитория: $repo_url"
-    wget -qO "$TMP_REPO_PKG" "$repo_url" || {
-        log_error "Не удалось скачать репозиторий"
+    local pkg_ext="deb"
+    [ "$OS_FAMILY" = "rhel" ] && pkg_ext="rpm"
+    TMP_REPO_PKG="/tmp/zabbix-release.${pkg_ext}"
+    RESOLVED_REPO_URL=""
+
+    fetch_repo_package "$TMP_REPO_PKG" || {
+        log_error "Не удалось скачать рабочий пакет репозитория для ${OS_PRETTY_NAME} и Zabbix ${ZABBIX_VERSION} (все варианты URL проверены). Похоже на сетевую проблему до repo.zabbix.com — проверьте связь с этим хостом с сервера (например: curl -v https://repo.zabbix.com/) либо повторите попытку позже. Также проверьте поддержку вашей ОС/версии: https://repo.zabbix.com/zabbix/${ZABBIX_VERSION}/"
         return 1
     }
 
     case "$PKG_MANAGER" in
         apt)
-            dpkg -i "$TMP_REPO_PKG" || {
-                log_error "Не удалось установить пакет репозитория"
-                return 1
+            # --allow-downgrades: на сервере может уже стоять более новая
+            # zabbix-release с прошлых попыток/версий — не считаем это
+            # ошибкой, нам нужен репозиторий именно для ${ZABBIX_VERSION}.
+            apt_retry apt-get install -y --allow-downgrades "$TMP_REPO_PKG" || {
+                log_warn "Установка репо-пакета провалилась, пробую доустановить зависимости"
+                apt_retry apt-get install -f -y || true
+                apt_retry apt-get install -y --allow-downgrades "$TMP_REPO_PKG" || {
+                    log_error "Не удалось установить пакет репозитория"
+                    return 1
+                }
             }
-            apt update || {
-                log_error "Не удалось обновить apt cache"
-                return 1
-            }
+            apt_update_safe || return 1
             ;;
         dnf)
             rpm -Uvh --force "$TMP_REPO_PKG" || {
@@ -349,7 +586,7 @@ install_repo() {
 install_agent_package() {
     case "$PKG_MANAGER" in
         apt)
-            apt install -y zabbix-agent2 || return 1
+            apt_retry apt-get install -y zabbix-agent2 || return 1
             ;;
         dnf)
             dnf_install_safe "zabbix-agent2" || return 1
@@ -360,8 +597,8 @@ install_agent_package() {
 remove_agent_package() {
     case "$PKG_MANAGER" in
         apt)
-            apt remove -y zabbix-agent2 || return 1
-            apt autoremove -y || true
+            apt_retry apt-get remove -y zabbix-agent2 || return 1
+            apt_retry apt-get autoremove -y || true
             ;;
         dnf)
             dnf_remove_safe "zabbix-agent2" || return 1
@@ -372,8 +609,8 @@ remove_agent_package() {
 remove_repo_package() {
     case "$PKG_MANAGER" in
         apt)
-            apt remove -y zabbix-release || true
-            apt autoremove -y || true
+            apt_retry apt-get remove -y zabbix-release || true
+            apt_retry apt-get autoremove -y || true
             ;;
         dnf)
             dnf_remove_safe "zabbix-release" || true
@@ -516,6 +753,7 @@ restart_agent() {
     else
         log_error "Не удалось запустить zabbix-agent2"
         systemctl status zabbix-agent2 --no-pager || true
+        journalctl -u zabbix-agent2 --no-pager -n 50 2>/dev/null || true
         return 1
     fi
 }
@@ -543,10 +781,15 @@ choose_zabbix_version() {
     echo -e "${YELLOW}[ИНФО] Выберите версию Zabbix:${NC}"
     echo "1. 7.0 LTS"
     echo "2. 6.0 LTS"
-    read -rp "Ваш выбор [1-2, по умолчанию 1]: " version_choice
+    echo "3. Своя версия (например 7.2, 7.4)"
+    read -rp "Ваш выбор [1-3, по умолчанию 1]: " version_choice
 
     case "$version_choice" in
         2) ZABBIX_VERSION="6.0" ;;
+        3)
+            read -rp "Введите версию Zabbix: " custom_version
+            ZABBIX_VERSION="${custom_version:-7.0}"
+            ;;
         *) ZABBIX_VERSION="7.0" ;;
     esac
 }
@@ -606,6 +849,7 @@ install_agent() {
     choose_zabbix_version
     get_configuration || return 1
     check_server_connectivity "$ZABBIX_SERVER" || true
+    ensure_time_sync
     install_repo || return 1
 
     log_info "Установка пакета zabbix-agent2"
@@ -619,7 +863,7 @@ install_agent() {
     restart_agent || return 1
     validate_config || true
     show_service_status
-    rm -f "$TMP_REPO_PKG"
+    [ -n "$TMP_REPO_PKG" ] && rm -f "$TMP_REPO_PKG"
     log_success "Установка завершена"
 }
 
@@ -707,19 +951,19 @@ show_help() {
 Действия:
   --install                  Установить агент
   --remove                   Удалить агент
-  --reconfigure              Перенастроить агент
-  --show-config              Показать текущую конфигурацию
-  --show-log                 Показать лог установщика
+  --reconfigure               Перенастроить агент
+  --show-config               Показать текущую конфигурацию
+  --show-log                  Показать лог установщика
 
 Параметры:
-  --server HOST              Сервер Zabbix
-  --hostname NAME            Имя хоста агента
-  --version 6.0|7.0          Версия Zabbix
-  --enable-remote-commands   Включить AllowKey=system.run[*]
-  --remove-config            При удалении удалить /etc/zabbix
-  --remove-repo              При удалении удалить zabbix-release
-  --yes                      Автоподтверждение
-  --help                     Показать помощь
+  --server HOST               Сервер Zabbix
+  --hostname NAME              Имя хоста агента
+  --version X.Y                Версия Zabbix (например 7.0, 6.0, 7.4)
+  --enable-remote-commands     Включить AllowKey=system.run[*]
+  --remove-config              При удалении удалить /etc/zabbix
+  --remove-repo                При удалении удалить zabbix-release
+  --yes                        Автоподтверждение
+  --help                       Показать помощь
 
 Примеры:
   $0 --install --server 10.10.10.10 --hostname srv-01 --version 7.0 --yes
