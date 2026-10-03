@@ -633,11 +633,9 @@ set_config_value() {
     local value="$2"
     local file="$3"
 
-    if grep -Eq "^[#[:space:]]*${key}=" "$file"; then
-        sed -i "s|^[#[:space:]]*${key}=.*|${key}=${value}|g" "$file"
-    else
-        echo "${key}=${value}" >> "$file"
-    fi
+    # убираем только рабочие строки ключа (комментарии-примеры не трогаем) и добавляем одну актуальную
+    sed -i "/^[[:space:]]*${key}=/d" "$file"
+    echo "${key}=${value}" >> "$file"
 }
 
 ensure_config_line() {
